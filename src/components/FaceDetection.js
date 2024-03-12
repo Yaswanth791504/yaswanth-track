@@ -1,6 +1,4 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import * as handpose from "@tensorflow-models/handpose";
-import "@tensorflow/tfjs-backend-webgl";
 import * as faceapi from "face-api.js";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -10,17 +8,13 @@ const FaceDetectionComponent = () => {
   const [faceTilt, setFaceTilt] = useState("");
   const [faceOrientation, setFaceOrientation] = useState("");
   const [mouthStatus, setMouthStatus] = useState("");
-  const [handRaised, setHandRaised] = useState(false);
 
   useEffect(() => {
     const loadModels = async () => {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
-        faceapi.nets.faceLandmark68Net.loadFromUri("/models"),
-        faceapi.nets.faceRecognitionNet.loadFromUri("/models"),
-        faceapi.nets.faceExpressionNet.loadFromUri("/models"),
-        handpose.load(), // Load the handpose model
-      ]);
+      await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+      await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
+      await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
+      await faceapi.nets.faceExpressionNet.loadFromUri("/models");
       console.log("Models loaded");
     };
 
@@ -43,53 +37,34 @@ const FaceDetectionComponent = () => {
   }, []);
 
   useEffect(() => {
-    const detectFacesAndHands = async () => {
+    const detectFaces = async () => {
       if (!videoRef.current) return;
 
       const canvas = faceapi.createCanvasFromMedia(videoRef.current);
-      document.body.append(canvas);
       const displaySize = {
         width: videoRef.current.width,
         height: videoRef.current.height,
       };
       faceapi.matchDimensions(canvas, displaySize);
 
-      const handModel = await handpose.load(); // Make sure the model is loaded
-
-      const interval = setInterval(async () => {
-        const faces = await faceapi
+      setInterval(async () => {
+        const detections = await faceapi
           .detectAllFaces(
             videoRef.current,
             new faceapi.TinyFaceDetectorOptions()
           )
-          .withFaceLandmarks()
-          .withFaceExpressions();
-
-        const hands = await handModel.estimateHands(videoRef.current, true);
-        setHandRaised(
-          hands.length > 0 &&
-            hands.some((hand) => hand.handInViewConfidence > 0.8)
-        ); // Update based on confidence
-
-        const resizedDetections = faceapi.resizeResults(faces, displaySize);
-        canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-        faceapi.draw.drawDetections(canvas, resizedDetections);
-        faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+          .withFaceLandmarks();
+        const resizedDetections = faceapi.resizeResults(
+          detections,
+          displaySize
+        );
         analyzeFaceFeatures(resizedDetections);
-
-        // You could enhance this by checking the position of the hand to see if it's actually raised
       }, 100);
-
-      return () => {
-        clearInterval(interval);
-      };
     };
 
-    videoRef.current &&
-      videoRef.current.addEventListener("play", detectFacesAndHands);
+    videoRef.current && videoRef.current.addEventListener("play", detectFaces);
   }, []);
 
-  // Your existing analyzeFaceFeatures function goes here
   const analyzeFaceFeatures = (detections) => {
     if (detections.length > 1) {
       alert("2 or more faces detected. Focusing on the nearest.");
@@ -178,8 +153,6 @@ const FaceDetectionComponent = () => {
         <span>Face-Tilt: {faceTilt}</span>
         <span>Face-Orientation: {faceOrientation}</span>
         <span>Mouth: {mouthStatus}</span>
-        <span>Hand Raised: {handRaised ? "Yes" : "No"}</span>{" "}
-        {/* Display hand raise status */}
       </div>
       <video
         ref={videoRef}
